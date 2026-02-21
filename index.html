@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stock Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        .section { display: none; }
+        .section.active { display: block; }
+        #progressBar { transition: width 0.4s ease; }
+        #viewModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; }
+        #viewModal.active { display: flex; align-items: center; justify-content: center; }
+        .variation-positive { color: #059669; font-weight: bold; }
+        .variation-negative { color: #dc2626; font-weight: bold; }
+        .alert-warning { background-color: #fef3c7; border: 1px solid #fcd34d; padding: 12px; border-radius: 6px; color: #92400e; }
+        .alert-error { background-color: #fee2e2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; color: #991b1b; }
+        .variation-alert { background-color: #fecaca; border: 2px solid #dc2626; padding: 12px; border-radius: 6px; color: #991b1b; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+<div class="flex min-h-screen">
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-slate-900 text-white p-4 flex flex-col overflow-y-auto">
+        <h2 class="text-xl font-bold mb-6 text-blue-400">📦 STOCK</h2>
+        <button onclick="showSection('productSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">📦 Products</button>
+        <button onclick="showSection('stockTakingSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">📊 Stock Taking</button>
+        <button onclick="showSection('creditSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">💳 Credit</button>
+        <button onclick="showSection('inventorySec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">🏪 Inventories</button>
+        <button onclick="showSection('currentStockSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">📈 Current Stock</button>
+        <button onclick="showSection('inventoryMovementSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">↔️ Transfer</button>
+        <button onclick="showSection('inventoryAuditSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">🔍 Audit</button>
+        <button onclick="showSection('reportSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">📑 Reports</button>
+        <button onclick="showSection('portfolioSec')" class="w-full text-left px-3 py-2 rounded hover:bg-slate-700 text-sm">📈 Portfolio</button>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 p-6 overflow-auto">
+        <!-- PRODUCTS SECTION -->
+        <section id="productSec" class="section active">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-bold text-lg mb-4">➕ Add Product</h3>
+                        <input id="productName" type="text" placeholder="Product Name" class="w-full border p-2 rounded mb-3">
+                        <select id="productInventory" class="w-full border p-2 rounded mb-3"><option value="">Select Inventory</option></select>
+                        <select id="productUnit" class="w-full border p-2 rounded mb-3">
+                            <option value="">Unit</option>
+                            <option>kg</option><option>liters</option><option>pcs</option>
+                        </select>
+                        <button onclick="addProduct()" class="w-full bg-blue-600 text-white rounded px-4 py-2">Add</button>
+                        <table class="w-full text-sm border mt-4">
+                            <thead class="bg-gray-50"><tr><th class="p-2">#</th><th class="p-2">Product</th><th class="p-2">Unit</th><th class="p-2">Inventory</th><th class="p-2">Action</th></tr></thead>
+                            <tbody id="productTable"></tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-4">📊 Stats</h3>
+                        <div class="bg-blue-50 p-4 rounded border mb-3"><p class="text-sm">Total Products</p><p class="text-3xl font-bold" id="totalProductsCount">0</p></div>
+                        <div class="bg-green-50 p-4 rounded border"><p class="text-sm">Total Inventories</p><p class="text-3xl font-bold" id="totalInventoriesCount">0</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CREDIT SECTION -->
+        <section id="creditSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">💳 Credit (Negative Variations)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-blue-50 rounded">
+                    <select id="creditInventory" class="border p-2 rounded" onchange="renderCredit()"><option value="">All</option></select>
+                    <button onclick="renderCredit()" class="bg-blue-600 text-white rounded px-4 font-bold">Refresh</button>
+                </div>
+                <table class="w-full text-sm border">
+                    <thead class="bg-red-800 text-white"><tr><th class="p-3">#</th><th class="p-3">Date</th><th class="p-3">Inventory</th><th class="p-3">Product</th><th class="p-3">Unit</th><th class="p-3">Debt</th><th class="p-3">Chef</th><th class="p-3">Cashier</th><th class="p-3">Controller</th><th class="p-3">Action</th></tr></thead>
+                    <tbody id="creditTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- CURRENT STOCK SECTION -->
+        <section id="currentStockSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">📈 Current Stock</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-green-50 rounded">
+                    <select id="currentStockInventory" class="border p-2 rounded" onchange="renderCurrentStock()"><option value="">Select Inventory</option></select>
+                    <button onclick="renderCurrentStock()" class="bg-green-600 text-white rounded px-4">Refresh</button>
+                </div>
+                <table class="w-full text-sm border">
+                    <thead class="bg-slate-800 text-white"><tr><th class="p-3">#</th><th class="p-3">Product</th><th class="p-3">Unit</th><th class="p-3">Date</th><th class="p-3">Current Stock</th></tr></thead>
+                    <tbody id="currentStockTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- INVENTORIES SECTION -->
+        <section id="inventorySec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-6">🏪 Inventory Management</h3>
+                <div class="mb-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200">
+                    <h4 class="font-bold text-lg mb-4">➕ Create Inventory</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div><label class="text-sm font-bold block mb-2">Type:</label><select id="inventoryType" class="w-full border p-2 rounded" onchange="updateSubInventoryOptions()"><option value="main">Main</option><option value="sub">Sub</option></select></div>
+                        <div id="mainInventoryContainer"><label class="text-sm font-bold block mb-2">Name:</label><input id="mainInventoryName" type="text" class="w-full border p-2 rounded"></div>
+                        <div id="subInventoryContainer" style="display:none;"><label class="text-sm font-bold block mb-2">Linked Main:</label><select id="linkedMainInventory" class="w-full border p-2 rounded"><option value="">Select</option></select></div>
+                        <div id="subNameContainer" style="display:none;"><label class="text-sm font-bold block mb-2">Sub Name:</label><input id="subInventoryName" type="text" class="w-full border p-2 rounded"></div>
+                        <div class="flex items-end"><button onclick="createInventory()" class="w-full bg-green-600 text-white rounded px-4 py-2">Create</button></div>
+                    </div>
+                </div>
+                <table class="w-full text-sm border">
+                    <thead class="bg-slate-800 text-white"><tr><th class="p-3">#</th><th class="p-3">Name</th><th class="p-3">Type</th><th class="p-3">Parent</th><th class="p-3">Products</th><th class="p-3">Action</th></tr></thead>
+                    <tbody id="allInventoriesTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TRANSFER SECTION -->
+        <section id="inventoryMovementSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">↔️ Transfer Stock</h3>
+                <div id="transferMessage" class="alert-warning" style="display:none;"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-orange-50 p-4 rounded">
+                        <label class="font-bold text-sm mb-2 block">From:</label>
+                        <select id="transferFromInventory" class="w-full border p-2 rounded mb-3" onchange="updateTransferProductsWithStock()"><option value="">Select</option></select>
+                        <label class="font-bold text-sm mb-2 block">Product:</label>
+                        <select id="transferProduct" class="w-full border p-2 rounded mb-3" onchange="displayProductCurrentStock()"><option value="">Select</option></select>
+                        <div id="productStockDisplay" class="text-sm font-bold bg-blue-100 p-2 rounded mb-3">Current Stock: 0</div>
+                        <label class="font-bold text-sm mb-2 block">Qty:</label>
+                        <input type="number" id="transferQty" class="w-full border p-2 rounded">
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded">
+                        <label class="font-bold text-sm mb-2 block">To:</label>
+                        <select id="transferToInventory" class="w-full border p-2 rounded mb-3"><option value="">Select</option></select>
+                        <label class="font-bold text-sm mb-2 block">Notes:</label>
+                        <textarea id="transferNotes" class="w-full border p-2 rounded h-20"></textarea>
+                        <button onclick="transferStock()" class="w-full bg-green-600 text-white rounded px-4 py-3 mt-3">TRANSFER</button>
+                    </div>
+                </div>
+                <table class="w-full text-sm border">
+                    <thead class="bg-gray-100"><tr><th class="p-2">#</th><th class="p-2">Date</th><th class="p-2">From</th><th class="p-2">To</th><th class="p-2">Product</th><th class="p-2">Qty</th><th class="p-2">Notes</th></tr></thead>
+                    <tbody id="transferHistoryTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- AUDIT SECTION -->
+        <section id="inventoryAuditSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">🔍 Audit Trail</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-blue-50 rounded">
+                    <select id="auditInventory" class="border p-2 rounded" onchange="renderAuditTrail()"><option value="">All</option></select>
+                    <input type="date" id="auditFromDate" class="border p-2 rounded" onchange="renderAuditTrail()">
+                </div>
+                <table class="w-full text-sm border">
+                    <thead class="bg-slate-800 text-white"><tr><th class="p-2">#</th><th class="p-2">Date/Time</th><th class="p-2">Type</th><th class="p-2">Inventory</th><th class="p-2">Details</th><th class="p-2">User</th></tr></thead>
+                    <tbody id="auditTrailTable"></tbody>
+                </table>
+            </div>
+        </section>
+        <!-- STOCK TAKING SECTION -->
+        <section id="stockTakingSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-2">📊 Stock Taking</h3>
+                <div id="warningMessage" class="alert-warning" style="display:none;"></div>
+                <div id="errorMessage" class="alert-error" style="display:none;"></div>
+                <div id="variationMessage" class="variation-alert" style="display:none;"></div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 p-3 bg-yellow-50 rounded">
+                    <input type="text" id="chef" placeholder="Chef" class="border p-2 rounded">
+                    <input type="text" id="cashier" placeholder="Cashier" class="border p-2 rounded">
+                    <input type="text" id="controller" placeholder="Controller" class="border p-2 rounded">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 p-3 bg-blue-50 rounded">
+                    <input type="date" id="stockDate" class="border p-2 rounded" onchange="checkDateInventoryChange()">
+                    <select id="stockInventory" class="border p-2 rounded" onchange="checkDateInventoryChange()"><option value="">Select</option></select>
+                </div>
+                <div id="currentSessionDisplay" class="mb-4 p-3 bg-green-100 rounded text-sm font-bold" style="display:none;">📝 Session: <span id="currentSessionText"></span></div>
+                <div class="mb-4 flex items-center gap-3 bg-gray-50 p-3 rounded">
+                    <label class="text-xs font-bold">Progress:</label>
+                    <div class="flex-1 bg-gray-300 rounded-full h-5"><div id="progressBar" class="h-full bg-red-500 w-0"></div></div>
+                    <span id="progressText" class="text-xs font-bold">0%</span>
+                </div>
+                <div id="stockInputArea" class="opacity-50 pointer-events-none grid grid-cols-8 gap-2 mb-4 bg-gray-50 p-3 rounded">
+                    <div class="col-span-2"><label class="text-xs font-bold">Product</label><select id="stockProduct" class="w-full border p-2 rounded text-xs" onchange="selectProduct()"></select></div>
+                    <div><label class="text-xs">Open</label><input type="number" id="openingQty" class="w-full border p-2 rounded text-xs bg-gray-200" readonly></div>
+                    <div><label class="text-xs">Add</label><input type="number" id="addedQty" value="0" class="w-full border p-2 rounded text-xs" oninput="calculate()"></div>
+                    <div><label class="text-xs">Used</label><input type="number" id="usedQty" value="0" class="w-full border p-2 rounded text-xs" oninput="calculate()"></div>
+                    <div><label class="text-xs">Spoil</label><input type="number" id="spoilQty" value="0" class="w-full border p-2 rounded text-xs" oninput="calculate()"></div>
+                    <div><label class="text-xs font-bold">C/Stock</label><input type="number" id="cStockQty" class="w-full border p-2 rounded text-xs font-bold bg-green-50" readonly></div>
+                    <div><label class="text-xs font-bold">P/Stock</label><input type="number" id="pStockQty" value="0" class="w-full border p-2 rounded text-xs font-bold" oninput="calculate()"></div>
+                    <div><label class="text-xs font-bold">Var</label><input type="number" id="variationQty" class="w-full border p-2 rounded text-xs font-bold bg-orange-50" readonly></div>
+                    <button onclick="addItem()" class="col-span-8 bg-blue-600 text-white h-8 rounded text-xs font-bold">ADD</button>
+                </div>
+                <table class="w-full text-xs text-center border mb-4">
+                    <thead class="bg-slate-800 text-white"><tr><th class="p-1">#</th><th class="p-1">Product</th><th class="p-1">Unit</th><th class="p-1">O</th><th class="p-1">A</th><th class="p-1">U</th><th class="p-1">S</th><th class="p-1 bg-green-700">C/S</th><th class="p-1 bg-blue-700">P/S</th><th class="p-1 bg-orange-700">V</th><th class="p-1">Action</th></tr></thead>
+                    <tbody id="stockTable"></tbody>
+                </table>
+                <button onclick="saveReport()" class="bg-green-600 text-white px-6 py-2 rounded font-bold">SAVE</button>
+                <button onclick="clearSession()" class="bg-gray-600 text-white px-6 py-2 rounded">CLEAR</button>
+            </div>
+        </section>
+
+        <!-- REPORTS SECTION -->
+        <section id="reportSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">📑 Reports</h3>
+                <table class="w-full text-sm border">
+                    <thead class="bg-gray-100"><tr><th class="p-3">#</th><th class="p-3">Date</th><th class="p-3">Inventory</th><th class="p-3">Chef</th><th class="p-3">Cashier</th><th class="p-3">Items</th><th class="p-3">Var Items</th><th class="p-3">Action</th></tr></thead>
+                    <tbody id="historyList"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- PORTFOLIO SECTION -->
+        <section id="portfolioSec" class="section">
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="font-bold text-lg mb-4">📈 Portfolio</h3>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4 p-3 bg-blue-50 rounded">
+                    <input type="date" id="portfolioFromDate" class="border p-2 rounded text-sm">
+                    <input type="date" id="portfolioToDate" class="border p-2 rounded text-sm">
+                    <select id="portfolioInventory" class="border p-2 rounded text-sm" onchange="updatePortfolioProducts()"><option value="">All</option></select>
+                    <select id="portfolioProduct" class="border p-2 rounded text-sm"><option value="">All</option></select>
+                    <button onclick="generatePortfolio()" class="bg-blue-600 text-white rounded px-3 font-bold text-sm col-span-1 md:col-span-5">Generate</button>
+                </div>
+                <table class="w-full text-xs border">
+                    <thead class="bg-slate-800 text-white"><tr><th class="p-1">#</th><th class="p-1">Date</th><th class="p-1">Product</th><th class="p-1">Unit</th><th class="p-1">Inv</th><th class="p-1 bg-orange-700">O</th><th class="p-1 bg-green-700">A</th><th class="p-1 bg-red-700">U</th><th class="p-1 bg-purple-700">S</th><th class="p-1 bg-blue-700">C</th><th class="p-1 bg-yellow-700">V</th></tr></thead>
+                    <tbody id="portfolioTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- MODAL -->
+<div id="viewModal">
+    <div class="bg-white rounded-xl w-11/12 max-w-4xl p-4 relative max-h-[90vh] overflow-y-auto">
+        <button onclick="closeModal()" class="absolute top-2 right-2 text-2xl">×</button>
+        <div id="modalContent"></div>
+        <div class="mt-4 flex justify-end gap-2 border-t pt-2">
+            <button onclick="exportPDF()" class="bg-red-600 text-white px-4 py-2 rounded text-sm">PDF</button>
+            <button onclick="closeModal()" class="bg-gray-300 px-4 py-2 rounded text-sm">Close</button>
+        </div>
+    </div>
+</div>
+<script>
+let products = JSON.parse(localStorage.getItem('products')) || [];
+let inventories = JSON.parse(localStorage.getItem('inventories')) || [];
+let history = JSON.parse(localStorage.getItem('stockHistory')) || [];
+let transferHistory = JSON.parse(localStorage.getItem('transferHistory')) || [];
+let auditLog = JSON.parse(localStorage.getItem('auditLog')) || [];
+let resolvedDebts = JSON.parse(localStorage.getItem('resolvedDebts')) || [];
+let tableItems = [];
+let currentReport = null;
+let currentSession = { date: null, inventory: null };
+
+function getProductCurrentStock(inventoryName, productId) {
+    const lastReport = history.filter(h => h.inventory === inventoryName && h.date < new Date().toISOString().split('T')[0]).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    if (!lastReport) return 0;
+    const item = lastReport.items.find(i => i.productId === productId);
+    return item ? item.pStock : 0;
+}
+
+function updateSubInventoryOptions() {
+    const type = document.getElementById('inventoryType').value;
+    document.getElementById('mainInventoryContainer').style.display = type === 'main' ? 'block' : 'none';
+    document.getElementById('subInventoryContainer').style.display = type === 'main' ? 'none' : 'block';
+    document.getElementById('subNameContainer').style.display = type === 'main' ? 'none' : 'block';
+    if (type === 'sub') updateMainInventoryDropdown();
+}
+
+function updateMainInventoryDropdown() {
+    const mains = inventories.filter(inv => inv.type === 'main');
+    document.getElementById('linkedMainInventory').innerHTML = '<option value="">Select</option>' + mains.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+}
+
+function updateAllInventorySelects() {
+    document.getElementById('productInventory').innerHTML = '<option value="">Select</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('stockInventory').innerHTML = '<option value="">Select</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('portfolioInventory').innerHTML = '<option value="">All</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('transferFromInventory').innerHTML = '<option value="">Select</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('transferToInventory').innerHTML = '<option value="">Select</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('auditInventory').innerHTML = '<option value="">All</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('currentStockInventory').innerHTML = '<option value="">Select</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    document.getElementById('creditInventory').innerHTML = '<option value="">All</option>' + inventories.map(inv => `<option value="${inv.id}">${inv.name}</option>`).join('');
+    updateMainInventoryDropdown();
+}
+
+function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === 'reportSec') renderHistory();
+    if (id === 'productSec') { refreshProductTable(); updateProductStats(); }
+    if (id === 'inventorySec') renderInventorySummary();
+    if (id === 'inventoryMovementSec') renderTransferHistory();
+    if (id === 'inventoryAuditSec') renderAuditTrail();
+    if (id === 'creditSec') renderCredit();
+    if (id === 'currentStockSec') updateAllInventorySelects();
+    if (id === 'portfolioSec') { updatePortfolioProducts(); document.getElementById('portfolioTable').innerHTML = '<tr><td colspan="11" class="p-1 text-center text-gray-500">Select and Generate</td></tr>'; }
+}
+
+function logAudit(type, inventory, details) {
+    auditLog.push({ id: Date.now(), timestamp: new Date().toISOString(), type, inventory, details, user: 'System' });
+    localStorage.setItem('auditLog', JSON.stringify(auditLog));
+}
+
+function updateProductStats() {
+    document.getElementById('totalProductsCount').textContent = products.length;
+    document.getElementById('totalInventoriesCount').textContent = inventories.length;
+}
+
+function addProduct() {
+    const name = document.getElementById('productName').value.trim();
+    const inventoryId = document.getElementById('productInventory').value;
+    const unit = document.getElementById('productUnit').value;
+    if (!name || !inventoryId || !unit) return alert('Fill all fields');
+    const inventory = inventories.find(inv => String(inv.id) === String(inventoryId));
+    products.push({ name, inventoryId, inventory: inventory.name, unit, id: String(Date.now()) });
+    localStorage.setItem('products', JSON.stringify(products));
+    logAudit('CREATE_PRODUCT', inventory.name, `Created: ${name}`);
+    document.getElementById('productName').value = '';
+    document.getElementById('productInventory').value = '';
+    document.getElementById('productUnit').value = '';
+    refreshProductTable();
+    updateProductStats();
+    alert('✅ Product Added!');
+}
+
+function refreshProductTable() {
+    const tbody = document.getElementById('productTable');
+    if (products.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-2 text-center">No products</td></tr>';
+        return;
+    }
+    tbody.innerHTML = products.map((p, i) => `
+        <tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2">${p.name}</td><td class="p-2">${p.unit}</td><td class="p-2">${p.inventory}</td>
+        <td class="p-2"><button onclick="deleteProduct('${p.id}')" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Delete</button></td></tr>
+    `).join('');
+}
+
+function deleteProduct(id) {
+    if (!confirm('Delete this product?')) return;
+    products = products.filter(p => String(p.id) !== String(id));
+    localStorage.setItem('products', JSON.stringify(products));
+    refreshProductTable();
+    updateProductStats();
+    alert('✅ Deleted!');
+}
+
+function renderInventorySummary() {
+    const tbody = document.getElementById('allInventoriesTable');
+    if (inventories.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-2 text-center">No inventories</td></tr>';
+        return;
+    }
+    tbody.innerHTML = inventories.map((inv, i) => {
+        const invProducts = products.filter(p => String(p.inventoryId) === String(inv.id)).length;
+        const parentInv = inv.parentId ? inventories.find(p => String(p.id) === String(inv.parentId)) : null;
+        const typeLabel = inv.type === 'main' ? '<span class="bg-blue-100 px-2 rounded text-xs">Main</span>' : '<span class="bg-green-100 px-2 rounded text-xs">Sub</span>';
+        return `<tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2">${inv.name}</td><td class="p-2">${typeLabel}</td><td class="p-2">${parentInv ? parentInv.name : '-'}</td><td class="p-2">${invProducts}</td><td class="p-2"><button onclick="deleteInventory('${inv.id}')" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Delete</button></td></tr>`;
+    }).join('');
+}
+
+function renderCurrentStock() {
+    const inventoryId = document.getElementById('currentStockInventory').value;
+    const tbody = document.getElementById('currentStockTable');
+    if (!inventoryId) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-2 text-center">Select inventory</td></tr>';
+        return;
+    }
+    const inv = inventories.find(i => String(i.id) === String(inventoryId));
+    const lastReport = history.filter(h => h.inventory === inv.name).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    if (!lastReport) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-2 text-center">No history</td></tr>';
+        return;
+    }
+    tbody.innerHTML = lastReport.items.map((item, i) => `<tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2">${item.name}</td><td class="p-2">${item.unit}</td><td class="p-2">${lastReport.date}</td><td class="p-2 bg-green-100 font-bold">${item.pStock}</td></tr>`).join('');
+}
+
+function renderCredit() {
+    let filtered = history;
+    const inventoryFilter = document.getElementById('creditInventory').value;
+    if (inventoryFilter) {
+        filtered = filtered.filter(h => h.inventory === inventories.find(i => String(i.id) === String(inventoryFilter))?.name);
+    }
+    const tbody = document.getElementById('creditTable');
+    const creditItems = [];
+    filtered.forEach(report => {
+        report.items.forEach(item => {
+            if (item.variation < 0) {
+                const debtId = `${report.date}-${report.inventory}-${item.productId}`;
+                creditItems.push({
+                    id: debtId, date: report.date, inventory: report.inventory, product: item.name, unit: item.unit,
+                    debt: Math.abs(item.variation), chef: report.chef, cashier: report.cashier, controller: report.controller,
+                    resolved: resolvedDebts.some(d => d.id === debtId)
+                });
+            }
+        });
+    });
+    if (creditItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="p-2 text-center">No debts</td></tr>';
+        return;
+    }
+    tbody.innerHTML = creditItems.map((item, i) => `
+        <tr class="border-b ${item.resolved ? 'bg-green-50' : ''}"><td class="p-2">${i + 1}</td><td class="p-2">${item.date}</td><td class="p-2">${item.inventory}</td>
+        <td class="p-2">${item.product}</td><td class="p-2">${item.unit}</td><td class="p-2 bg-red-200 font-bold">${item.debt}</td><td class="p-2">${item.chef}</td>
+        <td class="p-2">${item.cashier}</td><td class="p-2">${item.controller}</td>
+        <td class="p-2"><button onclick="acceptDebt('${item.id}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs">${item.resolved ? '✅ Resolved' : 'Accept'}</button></td></tr>
+    `).join('');
+}
+
+function acceptDebt(debtId) {
+    if (resolvedDebts.some(d => d.id === debtId)) {
+        alert('Already resolved');
+        return;
+    }
+    resolvedDebts.push({ id: debtId, resolvedDate: new Date().toISOString() });
+    localStorage.setItem('resolvedDebts', JSON.stringify(resolvedDebts));
+    renderCredit();
+    alert('✅ Debt marked as resolved!');
+}
+
+function updateTransferProductsWithStock() {
+    const fromId = document.getElementById('transferFromInventory').value;
+    if (!fromId) {
+        document.getElementById('transferProduct').innerHTML = '<option value="">Select</option>';
+        return;
+    }
+    const invProducts = products.filter(p => String(p.inventoryId) === String(fromId));
+    document.getElementById('transferProduct').innerHTML = '<option value="">Select</option>' + invProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+function displayProductCurrentStock() {
+    const productId = document.getElementById('transferProduct').value;
+    const fromId = document.getElementById('transferFromInventory').value;
+    if (!productId || !fromId) return;
+    const inventory = inventories.find(inv => String(inv.id) === String(fromId));
+    const currentStock = getProductCurrentStock(inventory.name, productId);
+    document.getElementById('productStockDisplay').textContent = `Current Stock: ${currentStock}`;
+}
+
+function transferStock() {
+    const fromId = document.getElementById('transferFromInventory').value;
+    const toId = document.getElementById('transferToInventory').value;
+    const productId = document.getElementById('transferProduct').value;
+    const qty = parseFloat(document.getElementById('transferQty').value) || 0;
+    const notes = document.getElementById('transferNotes').value.trim();
+    const msgElement = document.getElementById('transferMessage');
+    msgElement.style.display = 'none';
+    if (!fromId || !toId || !productId || qty <= 0) return alert('Fill all fields');
+    if (fromId === toId) return alert('From and To must be different');
+    const fromInv = inventories.find(inv => String(inv.id) === String(fromId));
+    const currentStock = getProductCurrentStock(fromInv.name, productId);
+    if (qty > currentStock) {
+        msgElement.style.display = 'block';
+        msgElement.textContent = `⚠️ Insufficient stock! Current stock is ${currentStock}`;
+        return;
+    }
+    const product = products.find(p => String(p.id) === String(productId));
+    const toInv = inventories.find(inv => String(inv.id) === String(toId));
+    transferHistory.push({
+        id: Date.now(), date: new Date().toISOString().split('T')[0],
+        fromInventory: fromInv.name, toInventory: toInv.name, product: product.name, quantity: qty, notes: notes
+    });
+    logAudit('TRANSFER', fromInv.name, `Transferred ${qty} of ${product.name} to ${toInv.name}`);
+    alert('✅ Transfer successful!');
+    document.getElementById('transferFromInventory').value = '';
+    document.getElementById('transferToInventory').value = '';
+    document.getElementById('transferProduct').value = '';
+    document.getElementById('transferQty').value = '';
+    document.getElementById('transferNotes').value = '';
+    document.getElementById('productStockDisplay').textContent = 'Current Stock: 0';
+    localStorage.setItem('transferHistory', JSON.stringify(transferHistory));
+    renderTransferHistory();
+}
+
+function renderTransferHistory() {
+    const tbody = document.getElementById('transferHistoryTable');
+    if (transferHistory.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-2 text-center">No transfers</td></tr>';
+        return;
+    }
+    tbody.innerHTML = transferHistory.map((t, i) => `<tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2">${t.date}</td><td class="p-2">${t.fromInventory}</td><td class="p-2">${t.toInventory}</td><td class="p-2">${t.product}</td><td class="p-2">${t.quantity}</td><td class="p-2">${t.notes || '-'}</td></tr>`).join('');
+}
+
+function renderAuditTrail() {
+    let filtered = auditLog;
+    const inventoryFilter = document.getElementById('auditInventory').value;
+    const dateFilter = document.getElementById('auditFromDate').value;
+    if (inventoryFilter) {
+        filtered = filtered.filter(a => String(a.inventory) === String(inventoryFilter));
+    }
+    if (dateFilter) {
+        filtered = filtered.filter(a => a.timestamp.split('T')[0] === dateFilter);
+    }
+    const tbody = document.getElementById('auditTrailTable');
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-2 text-center">No records</td></tr>';
+        return;
+    }
+    tbody.innerHTML = filtered.slice().reverse().map((a, i) => {
+        const [date, time] = a.timestamp.split('T');
+        const timeOnly = time.split('.')[0];
+        return `<tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2 text-xs">${date} ${timeOnly}</td><td class="p-2"><span class="bg-yellow-100 px-1 rounded text-xs">${a.type}</span></td><td class="p-2">${a.inventory || '-'}</td><td class="p-2 text-xs">${a.details}</td><td class="p-2">${a.user}</td></tr>`;
+    }).join('');
+}
+
+function createInventory() {
+    const type = document.getElementById('inventoryType').value;
+    let name = '';
+    let parentId = null;
+    if (type === 'main') {
+        name = document.getElementById('mainInventoryName').value.trim();
+        if (!name) return alert('Enter inventory name');
+    } else {
+        const parentInventoryId = document.getElementById('linkedMainInventory').value;
+        name = document.getElementById('subInventoryName').value.trim();
+        if (!parentInventoryId || !name) return alert('Fill all fields');
+        parentId = parentInventoryId;
+    }
+    inventories.push({ name, type, parentId: parentId || null, id: String(Date.now()) });
+    localStorage.setItem('inventories', JSON.stringify(inventories));
+    logAudit('CREATE_INVENTORY', name, `Created ${type} inventory`);
+    document.getElementById('mainInventoryName').value = '';
+    document.getElementById('linkedMainInventory').value = '';
+    document.getElementById('subInventoryName').value = '';
+    document.getElementById('inventoryType').value = 'main';
+    updateSubInventoryOptions();
+    renderInventorySummary();
+    updateAllInventorySelects();
+    alert('✅ Inventory created!');
+}
+
+function deleteInventory(id) {
+    if (!confirm('Delete this inventory?')) return;
+    inventories = inventories.filter(inv => String(inv.id) !== String(id));
+    products = products.filter(p => String(p.inventoryId) !== String(id));
+    localStorage.setItem('inventories', JSON.stringify(inventories));
+    localStorage.setItem('products', JSON.stringify(products));
+    renderInventorySummary();
+    updateAllInventorySelects();
+    alert('✅ Deleted!');
+}
+</script>
+<script>
+function checkDateInventoryChange() {
+    const date = document.getElementById('stockDate').value;
+    const inventory = document.getElementById('stockInventory').value;
+    const warningMsg = document.getElementById('warningMessage');
+    const errorMsg = document.getElementById('errorMessage');
+    const variationMsg = document.getElementById('variationMessage');
+    const inputArea = document.getElementById('stockInputArea');
+    const sessionDisplay = document.getElementById('currentSessionDisplay');
+    warningMsg.style.display = 'none';
+    errorMsg.style.display = 'none';
+    variationMsg.style.display = 'none';
+    if (!date || !inventory) {
+        inputArea.classList.add('opacity-50', 'pointer-events-none');
+        sessionDisplay.style.display = 'none';
+        return;
+    }
+    if (history.some(h => h.date === date && h.inventory === inventories.find(i => String(i.id) === String(inventory))?.name)) {
+        warningMsg.style.display = 'block';
+        warningMsg.textContent = '⚠️ Stock already counted for this date';
+        inputArea.classList.add('opacity-50', 'pointer-events-none');
+        sessionDisplay.style.display = 'none';
+        return;
+    }
+    const inv = inventories.find(i => String(i.id) === String(inventory));
+    const lastReport = history.filter(h => h.inventory === inv.name).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    if (lastReport) {
+        const unresolvedNegative = [];
+        lastReport.items.forEach(item => {
+            if (item.variation < 0) {
+                const debtId = `${lastReport.date}-${lastReport.inventory}-${item.productId}`;
+                if (!resolvedDebts.some(d => d.id === debtId)) {
+                    unresolvedNegative.push({ name: item.name, variation: item.variation, date: lastReport.date, inventory: lastReport.inventory });
+                }
+            }
+        });
+        if (unresolvedNegative.length > 0) {
+            variationMsg.style.display = 'block';
+            variationMsg.innerHTML = `⚠️ <strong>UNRESOLVED DEBTS FROM ${unresolvedNegative[0].date}:</strong><br>${unresolvedNegative.map(item => `${item.name}: ${item.variation}`).join('<br>')}<br><strong>Go to Credit section to resolve!`;
+            inputArea.classList.add('opacity-50', 'pointer-events-none');
+            sessionDisplay.style.display = 'none';
+            return;
+        }
+    }
+    if (tableItems.length > 0 && (currentSession.date !== date || currentSession.inventory !== inventory)) {
+        errorMsg.style.display = 'block';
+        errorMsg.textContent = '❌ Clear current session first';
+        document.getElementById('stockDate').value = currentSession.date;
+        document.getElementById('stockInventory').value = currentSession.inventory;
+        return;
+    }
+    currentSession.date = date;
+    currentSession.inventory = inventory;
+    inputArea.classList.remove('opacity-50', 'pointer-events-none');
+    sessionDisplay.style.display = 'block';
+    document.getElementById('currentSessionText').textContent = `${inv.name} - ${date}`;
+    populateDropdown();
+}
+
+function populateDropdown() {
+    const inventoryId = document.getElementById('stockInventory').value;
+    const inventoryProducts = products.filter(p => String(p.inventoryId) === String(inventoryId));
+    const addedProductIds = tableItems.map(item => item.productId);
+    const remainingProducts = inventoryProducts.filter(p => !addedProductIds.includes(p.id));
+    const dropdown = document.getElementById('stockProduct');
+    dropdown.innerHTML = '<option value="">Select</option>' + remainingProducts.map(p => `<option value="${p.id}" data-unit="${p.unit}">${p.name}</option>`).join('');
+    clearInputs();
+}
+
+function selectProduct() {
+    const productId = document.getElementById('stockProduct').value;
+    if (!productId) {
+        clearInputs();
+        return;
+    }
+    const date = document.getElementById('stockDate').value;
+    const inventoryId = document.getElementById('stockInventory').value;
+    const inv = inventories.find(i => String(i.id) === String(inventoryId));
+    let opening = 0;
+    const previousReports = history.filter(h => h.inventory === inv.name && h.date < date).sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (previousReports.length > 0) {
+        const lastItem = previousReports[0].items.find(i => i.productId == productId);
+        if (lastItem) {
+            opening = lastItem.cStock;
+            if (lastItem.variation > 0) {
+                opening += lastItem.variation;
+            }
+        }
+        const lastItem2 = previousReports[0].items.find(i => i.productId == productId);
+        if (lastItem2) {
+            const debtId = `${previousReports[0].date}-${previousReports[0].inventory}-${lastItem2.productId}`;
+            if (resolvedDebts.some(d => d.id === debtId)) {
+                opening -= Math.abs(lastItem2.variation);
+            }
+        }
+    }
+    const relevantTransfers = transferHistory.filter(t => {
+        const fromInv = inventories.find(i => i.name === t.fromInventory);
+        const toInv = inventories.find(i => i.name === t.toInventory);
+        const product = products.find(p => p.name === t.product);
+        return t.date === date && (
+            (String(fromInv?.id) === String(inventoryId) && product?.id === productId) ||
+            (String(toInv?.id) === String(inventoryId) && product?.id === productId)
+        );
+    });
+    let transferAdjustment = 0;
+    relevantTransfers.forEach(t => {
+        const fromInv = inventories.find(i => i.name === t.fromInventory);
+        const toInv = inventories.find(i => i.name === t.toInventory);
+        if (String(fromInv?.id) === String(inventoryId)) {
+            transferAdjustment -= t.quantity;
+        } else if (String(toInv?.id) === String(inventoryId)) {
+            transferAdjustment += t.quantity;
+        }
+    });
+    opening += transferAdjustment;
+    document.getElementById('openingQty').value = opening;
+    document.getElementById('addedQty').value = '0';
+    document.getElementById('usedQty').value = '0';
+    document.getElementById('spoilQty').value = '0';
+    document.getElementById('pStockQty').value = '0';
+    calculate();
+}
+
+function calculate() {
+    const opening = parseFloat(document.getElementById('openingQty').value) || 0;
+    const added = parseFloat(document.getElementById('addedQty').value) || 0;
+    const used = parseFloat(document.getElementById('usedQty').value) || 0;
+    const spoil = parseFloat(document.getElementById('spoilQty').value) || 0;
+    const pStock = parseFloat(document.getElementById('pStockQty').value) || 0;
+    const cStock = Math.max(0, opening + added - used - spoil);
+    const variation = pStock - cStock;
+    document.getElementById('cStockQty').value = cStock;
+    document.getElementById('variationQty').value = variation;
+}
+
+function clearInputs() {
+    document.getElementById('openingQty').value = '';
+    document.getElementById('addedQty').value = '0';
+    document.getElementById('usedQty').value = '0';
+    document.getElementById('spoilQty').value = '0';
+    document.getElementById('pStockQty').value = '0';
+    document.getElementById('cStockQty').value = '0';
+    document.getElementById('variationQty').value = '0';
+}
+
+function addItem() {
+    const productId = document.getElementById('stockProduct').value;
+    if (!productId) return alert('Select a product');
+    if (tableItems.some(item => item.productId === productId)) return alert('Product already added');
+    const productSelect = document.getElementById('stockProduct');
+    const productOption = productSelect.options[productSelect.selectedIndex];
+    const productName = productOption.text;
+    const productUnit = productOption.getAttribute('data-unit');
+    tableItems.push({
+        id: Date.now(), productId, name: productName, unit: productUnit,
+        opening: parseFloat(document.getElementById('openingQty').value) || 0,
+        added: parseFloat(document.getElementById('addedQty').value) || 0,
+        used: parseFloat(document.getElementById('usedQty').value) || 0,
+        spoil: parseFloat(document.getElementById('spoilQty').value) || 0,
+        cStock: parseFloat(document.getElementById('cStockQty').value) || 0,
+        pStock: parseFloat(document.getElementById('pStockQty').value) || 0,
+        variation: parseFloat(document.getElementById('variationQty').value) || 0
+    });
+    renderTable();
+    clearInputs();
+    populateDropdown();
+    updateProgress();
+}
+
+function renderTable() {
+    const tbody = document.getElementById('stockTable');
+    if (tableItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="p-1 text-center">No items</td></tr>';
+        return;
+    }
+    tbody.innerHTML = tableItems.map((item, i) => {
+        const varClass = item.variation > 0 ? 'variation-positive' : item.variation < 0 ? 'variation-negative' : '';
+        return `
+            <tr class="border-b"><td class="p-1">${i + 1}</td><td class="p-1">${item.name}</td><td class="p-1">${item.unit}</td>
+            <td class="p-1">${item.opening}</td><td class="p-1">${item.added}</td><td class="p-1">${item.used}</td><td class="p-1">${item.spoil}</td>
+            <td class="p-1 bg-green-100">${item.cStock}</td><td class="p-1 bg-blue-100">${item.pStock}</td>
+            <td class="p-1 bg-orange-100 ${varClass}">${item.variation > 0 ? '+' : ''}${item.variation}</td>
+            <td class="p-1"><button onclick="removeItem('${item.productId}')" class="bg-red-500 text-white px-1 py-0 rounded text-xs">Remove</button></td></tr>
+        `;
+    }).join('');
+}
+
+function removeItem(productId) {
+    tableItems = tableItems.filter(item => item.productId !== productId);
+    renderTable();
+    populateDropdown();
+    updateProgress();
+}
+
+function updateProgress() {
+    const inventoryId = document.getElementById('stockInventory').value;
+    const total = products.filter(p => String(p.inventoryId) === String(inventoryId)).length;
+    const progress = total > 0 ? Math.round(tableItems.length / total * 100) : 0;
+    document.getElementById('progressBar').style.width = progress + '%';
+    document.getElementById('progressText').textContent = progress + '%';
+}
+
+function clearSession() {
+    if (!confirm('Clear session?')) return;
+    tableItems = [];
+    currentSession = { date: null, inventory: null };
+    document.getElementById('stockDate').value = '';
+    document.getElementById('stockInventory').value = '';
+    document.getElementById('currentSessionDisplay').style.display = 'none';
+    clearInputs();
+    renderTable();
+    updateProgress();
+    alert('✅ Session cleared!');
+}
+
+function saveReport() {
+    const date = document.getElementById('stockDate').value;
+    const inventoryId = document.getElementById('stockInventory').value;
+    const chef = document.getElementById('chef').value.trim();
+    const cashier = document.getElementById('cashier').value.trim();
+    const controller = document.getElementById('controller').value.trim();
+    if (!date || !inventoryId || !chef || !cashier || !controller) return alert('Fill all staff names');
+    if (tableItems.length === 0) return alert('Add at least one item');
+    if (history.some(h => h.date === date && h.inventory === inventories.find(i => String(i.id) === String(inventoryId))?.name)) {
+        return alert('Report already saved for this date');
+    }
+    const inv = inventories.find(i => String(i.id) === String(inventoryId));
+    const report = {
+        id: Date.now(), date, inventory: inv.name, chef, cashier, controller,
+        items: tableItems.map(item => ({
+            productId: item.productId, name: item.name, unit: item.unit, opening: item.opening, added: item.added,
+            used: item.used, spoil: item.spoil, cStock: item.cStock, pStock: item.pStock, variation: item.variation
+        }))
+    };
+    history.push(report);
+    localStorage.setItem('stockHistory', JSON.stringify(history));
+    logAudit('SAVE_REPORT', inv.name, `Saved stock report for ${date}`);
+    alert('✅ Report saved!');
+    clearSession();
+}
+
+function renderHistory() {
+    const tbody = document.getElementById('historyList');
+    if (history.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-2 text-center">No reports</td></tr>';
+        return;
+    }
+    tbody.innerHTML = history.map((h, i) => {
+        const varItems = h.items.filter(item => item.variation !== 0).length;
+        return `
+            <tr class="border-b"><td class="p-2">${i + 1}</td><td class="p-2">${h.date}</td><td class="p-2">${h.inventory}</td>
+            <td class="p-2">${h.chef}</td><td class="p-2">${h.cashier}</td><td class="p-2">${h.items.length}</td><td class="p-2">${varItems}</td>
+            <td class="p-2"><button onclick="viewReport(${h.id})" class="bg-blue-600 text-white px-2 py-1 rounded text-xs">View</button></td></tr>
+        `;
+    }).join('');
+}
+
+function viewReport(reportId) {
+    const report = history.find(h => h.id == reportId);
+    if (!report) return;
+    currentReport = report;
+    const html = `
+        <h3 class="font-bold text-lg mb-3">${report.date} - ${report.inventory}</h3>
+        <p><strong>Chef:</strong> ${report.chef} | <strong>Cashier:</strong> ${report.cashier} | <strong>Controller:</strong> ${report.controller}</p>
+        <table class="w-full text-xs border mt-4">
+            <thead class="bg-gray-200"><tr><th class="p-1">#</th><th class="p-1">Product</th><th class="p-1">O</th><th class="p-1">A</th><th class="p-1">U</th><th class="p-1">S</th><th class="p-1">C/S</th><th class="p-1">P/S</th><th class="p-1">Var</th></tr></thead>
+            <tbody>${report.items.map((item, i) => `<tr class="border-b"><td class="p-1">${i + 1}</td><td class="p-1">${item.name}</td><td class="p-1">${item.opening}</td><td class="p-1">${item.added}</td><td class="p-1">${item.used}</td><td class="p-1">${item.spoil}</td><td class="p-1">${item.cStock}</td><td class="p-1">${item.pStock}</td><td class="p-1 ${item.variation > 0 ? 'text-green-600 font-bold' : item.variation < 0 ? 'text-red-600 font-bold' : ''}">${item.variation > 0 ? '+' : ''}${item.variation}</td></tr>`).join('')}</tbody>
+        </table>
+    `;
+    document.getElementById('modalContent').innerHTML = html;
+    document.getElementById('viewModal').classList.add('active');
+}
+
+function updatePortfolioProducts() {
+    const inventoryId = document.getElementById('portfolioInventory').value;
+    const products_filtered = inventoryId ? products.filter(p => String(p.inventoryId) === String(inventoryId)) : products;
+    document.getElementById('portfolioProduct').innerHTML
